@@ -53,3 +53,9 @@ dkms.conf
 
 # Binary files
 *.bin
+
+# Image files
+*.img
+
+# Log files
+*.syms
