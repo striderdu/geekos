@@ -98,7 +98,46 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
      * If all goes well, store the pointer to the new thread in
      * pThread and return 0.  Otherwise, return an error code.
      */
-    TODO("Spawn a process by reading an executable from a filesystem");
+    int rc;
+    char *exeFileData=0;
+    ulong_t exeFileLength;
+    struct User_Context *userContext=0;
+    struct Kernel_Thread *process=0;
+    struct Exe_Format Exe_Format;
+    if((result=Read_Fully(program,(void **) &exeFileData, &exeFileLength)) != 0)
+    {
+        Print("Failed to read file %s\n", program);
+        goto fail;
+    }
+    if((result=Parse_ELF_Executable(exeFileData, exeFileLength, &exeFormat)) != 0)
+    {
+        Print("Failed to parse ELF file \n");
+        goto fail;
+    }
+    if((result=Load_User_Program(exeFileData, exeFileLength, &exeFormat, command,&UserContext)) != 0)
+    {
+        Print("Failed to load user program\n");
+        goto fail;
+    }
+    Free(exeFileData);
+    exeFileData=0;
+    process=Start_User_Thread(userContext,false);
+    if (process != 0)
+    {
+        KASSERT(process->refCount==2);
+        *pThread=process;
+    }
+    else
+    {
+        rc=ENOMEM;
+    }
+    return rc;
+
+fail:
+    if(exeFileData!=0) Free(exeFileData);
+    if(userContext!=0) Destroy_User_Context(userContext);
+    return rc;
+    //TODO("Spawn a process by reading an executable from a filesystem");
 }
 
 /*
@@ -117,6 +156,28 @@ void Switch_To_User_Context(struct Kernel_Thread* kthread, struct Interrupt_Stat
      * the Set_Kernel_Stack_Pointer() and Switch_To_Address_Space()
      * functions.
      */
-    TODO("Switch to a new user address space, if necessary");
+    static struct User_Context* s_currentUserContext;
+    extern int userDebug;
+    struct User_Context* userContext=kthread->userContext;
+    KASSERT(!Interrupts_Enabled());
+    if(userContext==0)
+    {
+        return ;
+    }
+    if(userContext!=s_currentUserContext)
+    {
+        ulong_t esp0;
+        if(userDebug) Print("A[%p]\n", kthread);
+        Switch_To_Address_Space(userContext);
+        esp0=((ulong_t)kthread->stackPage)+PAGE_SIZE;
+        if(userDebug) Print("s[%lx]\n", esp0);
+        Set_Kernel_Stack_Pointer(esp0);
+        s_currentUserContext=userContext;
+    }
+    /*if(kthread->userContext==NULL)
+    {
+        return ;
+    }
+    TODO("Switch to a new user address space, if necessary");*/
 }
 
